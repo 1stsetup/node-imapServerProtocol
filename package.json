@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "author": "Michel Verbraak <info@1st-setup.nl>",
   "description": "Implements a nodejs module with the imap server protocol",
-  "main": "./imapProtocol",
+  "main": "./imapServerProtocol",
   "engines": { "node": ">=0.10.0" },
   "keywords": [ "imap", "server", "protocol" ],
   "licenses": [ { "type": "GPL v2" } ],

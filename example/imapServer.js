@@ -6,7 +6,7 @@ const IMAP_STATE_AUTHENTICATED = 2;
 const IMAP_STATE_SELECTED = 4;
 const IMAP_STATE_LOGOUT = 8;
 
-var imapProtocol = require('./imapProtocol');
+var imapProtocol = require('../imapServerProtocol');
 
 var server = net.createServer(function(socket) { //'connection' listener
 	console.log('server connected');
