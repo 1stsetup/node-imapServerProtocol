@@ -17,7 +17,7 @@ var server = net.createServer(function(socket) { //'connection' listener
 		argumentsAllowed: 2,
 		responseFunc: function(imap, tag, args) {
 			console.log("Hello:%s. You password='%s'",args[0], args[1]);
-			imap.push(tag+" OK LOGIN completed\r\n");
+			imap.sendOK(tag, "LOGIN completed");
 		}
 	});
 
@@ -27,15 +27,15 @@ var server = net.createServer(function(socket) { //'connection' listener
 
 	imapHandler.on('imapOk', function(tag, command, args) {
 console.log("imapOK: tag:%s, command:%s", tag, command);
-		imapHandler.push(tag+" OK "+command+"\r\n");
+		imapHandler.sendOK(tag, command);
 	});
 
 	imapHandler.on('imapBad', function(tag, string) {
-		imapHandler.push(tag+" BAD "+string+"\r\n");
+		imapHandler.sendBAD(tag, string);
 	});
 
 	imapHandler.on('imapNo', function(string) {
-		imapHandler.push('* NO '+string+"\r\n");
+		imapHandler.sendNO(undefined, string);
 	});
 
 	imapHandler.showGreeting();

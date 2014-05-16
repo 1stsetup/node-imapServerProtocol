@@ -24,7 +24,7 @@ var IMAP_COMMANDS = {
 		argumentsAllowed: 0,
 		responseFunc: function(imap, tag) {
 			imap.push("* CAPABILITY "+imap.capabilities+"\r\n");
-			imap.push(tag+" OK CAPABILITY completed\r\n");
+			imap.sendOK(tag, "CAPABILITY completed");
 		}
 	},
 	"NOOP" : {
@@ -35,9 +35,13 @@ var IMAP_COMMANDS = {
 		allowedStates : IMAP_STATE_NOT_AUTHENTICATED + IMAP_STATE_AUTHENTICATED + IMAP_STATE_SELECTED + IMAP_STATE_LOGOUT,
 		argumentsAllowed: 0,
 		responseFunc: function(imap, tag) {
+console.log(" !! 1");
 			imap.push("* BYE IMAP4rev1 Server logging out\r\n");
-			imap.push(tag+" OK LOGOUT completed\r\n");
+console.log(" !! 2");
+			imap.sendOK(tag, "LOGOUT completed");
+console.log(" !! 3");
 			imap.disconnect();
+console.log(" !! 4");
 		}
 	},
 	"STARTTLS" : {
@@ -52,14 +56,14 @@ var IMAP_COMMANDS = {
 		argumentsAllowed: 1,
 		responseFunc: function(imap, tag, args) {
 			console.log("AUTHENTICATE args:",args);
-			imap.push(tag+" NO Do not know any AUTHENTICATE mechanism\r\n");
+			imap.sendNO(tag, "Do not know any AUTHENTICATE mechanism");
 		}
 	},
 	"LOGIN" : { // Default we accept everything
 		allowedStates : IMAP_STATE_NOT_AUTHENTICATED,
 		argumentsAllowed: 2,
 		responseFunc: function(imap, tag, args) {
-			imap.push(tag+" OK LOGIN completed\r\n");
+			imap.sendOK(tag, "LOGIN completed");
 		}
 	}
 }
@@ -124,23 +128,28 @@ imapProtocol.prototype.startTLS = function(tag) {
 	this._socket.unpipe(this);
 	this.unpipe(this._socket);
 
-	var securePair = require("tls").createSecurePair(this._sslContext, true, false, false);
+	this._securePair = require("tls").createSecurePair(this._sslContext, true, false, false);
 	
-	securePair.encrypted.pipe(this._socket);
-	this._socket.pipe(securePair.encrypted);
+	this._securePair.encrypted.pipe(this._socket);
+	this._socket.pipe(this._securePair.encrypted);
 
 	var self = this;
-	securePair.on('error', function() {
+	this._securePair.on('error', function() {
 		self._socket.write(tag+" NO Error staring secure connection\r\n");
 	});
 
-	securePair.on('secure', function() {
+	this._securePair.on('secure', function() {
 
 		self._removeSTARTTLS();
 		self._removeLOGINDISABLED();
 
-		securePair.cleartext.pipe(self);
-		self.pipe(securePair.cleartext);
+		self._securePair.cleartext.pipe(self);
+		self.pipe(self._securePair.cleartext);
+	});
+
+	this._socket.on('end', function() {
+		console.log('server disconnected');
+		self.close();
 	});
 
 	this._socket.write(tag+" OK Begin TLS negotiation now\r\n");
@@ -206,7 +215,31 @@ imapProtocol.prototype.disableTLS = function() {
 imapProtocol.prototype.showGreeting = function() {
 	this._socket.write('* OK IMAP4rev1 server ready\r\n');
 }
-	
+
+imapProtocol.prototype.removeTag = function(tag) {
+	if (tag !== undefined) {
+		delete this._tags[tag];
+	}
+}
+
+imapProtocol.prototype.sendOK = function(tag, text) {
+	this.push((tag || "*")+" OK "+text+"\r\n");
+
+	this.removeTag(tag);
+}
+
+imapProtocol.prototype.sendBAD = function(tag, text) {
+	this.push((tag || "*")+" BAD "+text+"\r\n");
+
+	this.removeTag(tag);
+}
+
+imapProtocol.prototype.sendNO = function(tag, text) {
+	this.push((tag || "*")+" NO "+text+"\r\n");
+
+	this.removeTag(tag);
+}
+
 imapProtocol.prototype.emitOK = function(tag, command, args) {
 console.log("emitOK: %s %s", tag, command);
 	this.emit('imapOk', tag, command, args);
@@ -279,18 +312,40 @@ console.log("_processString: command:", command);
 }
 
 imapProtocol.prototype.close = function() {
+console.log("close()");
 	if (this._socket === undefined) return;
 
 	this._socket.unpipe();
 	this._socket = undefined;
 	this._authenticated = false;
+
+	if (this._securePair) {
+		this._securePair.cleartext.unpipe(this);
+		this.unpipe(this._securePair.cleartext);
+	}
 }
 
 imapProtocol.prototype.disconnect = function() {
 	if (this._socket === undefined) return;
 
-	this._socket.end();
-	this.close();
+	var self = this;
+	this.end(function(){
+		if (self._securePair) {
+			self._securePair.cleartext.end(function(){
+				self._securePair.encrypted.end(function(){
+					self._socket.end(function(){
+						self.close();
+					});
+				});
+			});
+		}
+		else {
+			self._socket.end(function(){
+				self.close();
+			});
+		}
+	});
+
 }
 
 imapProtocol.prototype._transform = function(chunk, encoding, done) {
@@ -305,9 +360,6 @@ imapProtocol.prototype._transform = function(chunk, encoding, done) {
 						self._lfSeen = false;
 						self._crSeen = false;
 						self._string = '';
-						if (tag !== undefined) {
-							delete self._tags[tag];
-						}
 					});
 				}
 				else {
