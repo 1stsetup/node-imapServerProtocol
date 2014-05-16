@@ -1,0 +1,10 @@
+{ "name": "imapServerProtocol",
+  "version": "0.0.1",
+  "author": "Michel Verbraak <info@1st-setup.nl>",
+  "description": "Implements a nodejs module with the imap server protocol",
+  "main": "./imapProtocol",
+  "engines": { "node": ">=0.10.0" },
+  "keywords": [ "imap", "server", "protocol" ],
+  "licenses": [ { "type": "GPL v2" } ],
+  "repository": { "type": "git", "url": "https://github.com/1stsetup/node-imapServerProtocol.git" }
+}
